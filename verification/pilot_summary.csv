@@ -1,0 +1,5 @@
+mode,n,solved,accuracy_pct,internal_accepted,false_accept_count,false_accept_pct_of_accepted,workflow_accepted,workflow_false_accept_count,workflow_false_accept_pct_of_workflow_accepted,mean_attempts,mean_calls,mean_total_tokens,rows_missing_token_usage,mean_solve_seconds
+baseline,2,2,100,0,0,,0,0,,1,1,369,0,3.16
+testing,2,2,100,0,0,,0,0,,3,4,2206,0,11.5
+reflexion,2,2,100,0,0,,0,0,,3,6,3653,0,14.7
+autogen,2,2,100,0,0,,0,0,,3,7,5282.5,0,18.29

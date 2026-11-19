@@ -1,0 +1,40 @@
+{
+  "model": "gpt-4o-mini",
+  "temperature": 0.0,
+  "seed": 42,
+  "max_attempts": 3,
+  "pilot": false,
+  "tasks": [
+    "HumanEval/125",
+    "HumanEval/105",
+    "HumanEval/163",
+    "HumanEval/156",
+    "HumanEval/151",
+    "HumanEval/131",
+    "HumanEval/123",
+    "HumanEval/79",
+    "HumanEval/12",
+    "HumanEval/9",
+    "HumanEval/50",
+    "HumanEval/107",
+    "HumanEval/106",
+    "HumanEval/120",
+    "HumanEval/15",
+    "HumanEval/153",
+    "HumanEval/7",
+    "HumanEval/92",
+    "HumanEval/82",
+    "HumanEval/145"
+  ],
+  "methods": [
+    "baseline",
+    "testing",
+    "reflexion",
+    "autogen"
+  ],
+  "include_autogen": true,
+  "dataset_sha256": "b796127e635a67f93fb35c04f4cb03cf06f38c8072ee7cee8833d7bee06979ef",
+  "docker_image": "python:3.11-slim",
+  "memory": "latest reflection only",
+  "shared_initial_and_tests": true
+}

@@ -2,9 +2,20 @@
 
 **Authors:** Arun Munagala and Anuj Prakash
 **Course:** Introduction to Computer Engineering, Indiana University
-**Status:** Harness implemented and verified, including real Docker
-integration tests. Real LLM benchmark experiments **not yet run** (see
-[Section 19](#19-current-project-status-and-remaining-work)).
+**Presentations:** 1 — Toolformer; 2 — Reflexion; 3 — AutoGen proactive
+review (Method D).
+
+**Status:** Harness implemented and verified (100 passing tests, including
+14 real Docker integration tests). A real two-problem pilot and a real
+20-problem HumanEval experiment (Methods A–D, `gpt-4o-mini`, seed 42) have
+been run; see [Section 18](#18-results-and-output-interpretation) and
+[Section 19](#19-current-project-status-and-remaining-work).
+
+**Key reports:** [pilot findings](verification/pilot_findings_report.md) ·
+[final experiment report](verification/final_experiment_report.md) ·
+[Docker integration report](verification/docker_integration_report.md) ·
+[AutoGen design](docs/AUTOGEN_DESIGN.md) ·
+[implementation guide](docs/IMPLEMENTATION_GUIDE.md).
 
 > ## 📢 Path 2 update: AutoGen proactive review (Method D)
 > Our final research direction has moved from Path 1 (this Reflexion
@@ -107,7 +118,9 @@ text of the prompt across attempts. This is why the paper calls it
 improved policy) but implemented entirely through natural language, not
 gradient updates.
 
-**Presentation 3 (this project)** asks: does that verbal reflection step
+**Presentation 3 (this project)** is the AutoGen comparison: does proactive
+multi-agent review (Method D) catch mistakes that failure-triggered
+reflection overlooks? Its precursor question asks: does that verbal reflection step
 actually contribute to the improvement, separately from the mundane fact
 that showing the model *any* test failure and asking it to retry would
 probably already help? The original paper reports a Python HumanEval
@@ -141,8 +154,8 @@ Everything in this section that is attributed to the original paper (the
 80.1%→91% number, the Rust ablation, Algorithm 1) is a **reported result
 from Shinn et al. (2023)**, not something we have measured ourselves. Any
 number from *our own* experiment will be clearly labeled as ours, and as
-of this writing **we have not yet run that experiment** — see
-[Section 19](#19-current-project-status-and-remaining-work).
+the 20-problem experiment has now been run; its results are in
+[Section 18](#18-results-and-output-interpretation).
 
 ---
 
@@ -157,8 +170,9 @@ of this writing **we have not yet run that experiment** — see
 test-based debugging without reflection (Method B), because a reflection
 forces the model to articulate a diagnosis before attempting a fix, which
 *might* produce a more targeted revision than directly reacting to raw
-test-failure text. **This is an untested hypothesis.** We have not yet run
-the benchmark, and it is entirely possible that Methods B and C perform
+test-failure text. **This was tested on a 20-problem sample (Section 18).** The run did not
+establish a difference (Reflexion 19/20 vs Testing 17/20; exact two-sided
+$p = 0.5$ on the two discordant problems), and it is entirely possible that Methods B and C perform
 similarly, or that B outperforms C on this small sample, since reflection
 adds inference cost and extra unconstrained generation without any
 guarantee of a better outcome.
@@ -234,6 +248,12 @@ additionally share the **same generated internal tests**
 | Max total candidates | 1 | `max_attempts` (default 3) | `max_attempts` (default 3) |
 | Stop conditions | Always 1 generation | `internal_pass` / `no_valid_tests` / `trial_limit` | `internal_pass` / `no_valid_tests` / `trial_limit` |
 | Extra LLM calls per failed attempt | 0 | 1 (revision) | 2 (reflection + revision) |
+
+**Method D (AutoGen proactive review, Path 2)** uses the same shared initial
+code and generated tests, but calls a reviewer on every attempt. A candidate
+is accepted only if internal tests pass **and** the reviewer returns a valid
+`APPROVE`; otherwise a programmer revises it, up to the same attempt budget.
+See [`docs/AUTOGEN_DESIGN.md`](docs/AUTOGEN_DESIGN.md).
 
 ### Control flow (Methods B and C)
 
@@ -323,7 +343,7 @@ feedback, in the revision prompt. The resulting candidate may be
 identical in substance to Method B's in this simple illustrative example
 — the real empirical question is whether reflection helps more
 consistently or on harder problems, which is exactly what running the
-actual benchmark (not yet done) is for.
+actual benchmark (run; see Section 18) addresses.
 
 **Final evaluation:** both arms' final candidates are frozen, and *only
 then* are they each run once against HumanEval's official hidden test
@@ -865,8 +885,8 @@ python -m pip install -r requirements.txt
 python -m pytest -v tests/
 ```
 
-You should see **67 passed** (11 original harness tests + 45 extended
-verification tests + 11 regression tests). If any test fails after a
+You should see **100 passed** in the current suite (the earlier 67-test
+breakdown in `verification/` logs is historical). If any test fails after a
 fresh clone with an unmodified checkout, something is wrong with your
 environment, not with the methodology — stop and investigate before
 proceeding.
@@ -938,9 +958,9 @@ budget, specifically so a missing Docker setup fails fast rather than
 after paying for LLM calls.
 
 **This is risk reduction, not a security guarantee.** We are not claiming
-the sandbox is perfectly secure, and we have not yet performed live
-integration testing against a real running Docker daemon with real
-adversarial or buggy model output — the Docker return-code and timeout
+the sandbox is perfectly secure, and live integration tests (14) against a real Docker daemon
+cover only the scenarios they exercise, not adversarial model output in
+general — the Docker return-code and timeout
 *classification logic* has been verified with **mocked** `subprocess.run`
 calls (see `tests/test_extended_verification.py`'s
 `test_inv5_docker_*` tests), but **live Docker integration testing is
@@ -1002,22 +1022,21 @@ provider's pricing before running the full experiment.
 
 ## 17. Running the experiment
 
-> **Every command below is labeled according to whether we have actually
-> executed it.** As of this writing, **none of the commands in this
-> section have been run as part of a real experiment** — see
-> [Section 19](#19-current-project-status-and-remaining-work).
+> **Commands below are labeled by whether they were run.** The pilot and
+> final 20-problem experiments listed below have been run; see
+> [Section 18](#18-results-and-output-interpretation) for their outputs.
 
 All flags below are taken directly from `experiment.py`'s
 `argparse` configuration; none are assumed or invented.
 
-**1. Download HumanEval** *(not yet run)*
+**1. Download HumanEval** *(run; dataset SHA-256 verified)*
 ```bash
 python dataset.py
 ```
 Downloads `data/HumanEval.jsonl.gz` if missing, then prints the number of
 problems and the file's SHA256 hash.
 
-**2. Run the two-problem pilot** *(not yet run)*
+**2. Run the two-problem pilot** *(run; results in `results/pilot_autogen/`, git-ignored)*
 ```bash
 python experiment.py --pilot --out results/pilot
 python analyze_results.py results/pilot
@@ -1028,7 +1047,7 @@ python analyze_results.py results/pilot
 directory that **does not already exist** (`args.out.mkdir(..., exist_ok=False)`),
 to protect prior results from accidental overwrite.
 
-**3. Run the final 20-problem experiment** *(not yet run)*
+**3. Run the final 20-problem experiment** *(run; results in `results/final_autogen/`, git-ignored)*
 ```bash
 python experiment.py --count 20 --seed 42 --max-attempts 3 --out results/final
 python analyze_results.py results/final
@@ -1093,8 +1112,8 @@ for the additional fields this adds to `results.jsonl`/`summary.csv`.
 
 ## 18. Results and output interpretation
 
-Each run's `--out` directory will contain (structure as implemented, not
-yet populated with real data):
+Each run's `--out` directory contains (the final run is populated; the
+files are git-ignored):
 
 - **`config.json`** — model, seed, `max_attempts`, pilot flag, selected
   task IDs, dataset SHA256, Docker image name, and a note that only the
@@ -1123,17 +1142,46 @@ interest, and read its `history` list — each entry shows exactly what
 code was tried, what the internal test feedback was, and (for Reflexion)
 the exact reflection text generated before that attempt's revision.
 
-### Results table (TBD — no real experiment has been run yet)
+### Final 20-problem results (official held-out correctness)
 
-| Method | n | Solved | Accuracy % | Mean attempts | Mean calls | Mean tokens | False accept % |
-|---|---|---|---|---|---|---|---|
-| Baseline | — | — | — | — | — | — | — |
-| Testing | — | — | — | — | — | — | — |
-| Reflexion | — | — | — | — | — | — | — |
+Model `gpt-4o-mini`, temperature 0, seed 42, max 3 candidate attempts,
+Docker `python:3.11-slim` evaluator, 20 HumanEval problems.
 
-This table is intentionally blank. Any numbers that appear here in a
-future version of this README will come from an actual recorded run in
-`results/`, never from estimation or example values.
+| Method | Correct | Accuracy | Mean calls | Mean tokens | Mean latency |
+|---|---:|---:|---:|---:|---:|
+| Baseline | 17/20 | 85% | 1 | 392.2 | 3.18 s |
+| Testing | 17/20 | 85% | 2.8 | 1432.4 | 8.40 s |
+| Reflexion | 19/20 | 95% | 3.5 | 1996.75 | 9.62 s |
+| AutoGen | 17/20 | 85% | 7 | 5163.75 | 19.52 s |
+
+- **Tokens** are per-problem means of input + output tokens. Shared calls
+  (`initial_code`, `generate_tests`) are attributed logically to each method,
+  so the per-method totals **must not be summed** to estimate API billing.
+- **Official correctness** is the held-out HumanEval test result. **Internal
+  acceptance** means the generated tests passed; it is a different quantity.
+  Internal tests were wrong or out of spec on several problems, so internal
+  acceptance is a weak proxy for correctness on this sample.
+- **Reviewer (AutoGen):** 60 reviewer decisions, all valid JSON, all
+  `REVISE`; **zero `APPROVE`**; therefore **zero workflow-accepted candidates**,
+  and all 20 runs stopped at the trial limit.
+- **Paired result:** Reflexion-only successes were HumanEval/105 and /163;
+  AutoGen had no exclusive successes. Exact two-sided $p = 0.5$. The sample
+  cannot distinguish the methods.
+- **Missing numpy:** the sandbox image (`python:3.11-slim`) lacks `numpy`. Some
+  generated candidates import it and fail with `ModuleNotFoundError`. This is
+  an environment compatibility limitation affecting some results, not a
+  production-code defect.
+
+Full analysis: [`verification/final_experiment_report.md`](verification/final_experiment_report.md).
+Pilot (2 problems): [`verification/pilot_findings_report.md`](verification/pilot_findings_report.md).
+
+**Compact evidence (Git-tracked):** `verification/final_run_config.json`,
+`verification/final_summary.csv`, `verification/final_task_outcomes.csv`,
+`verification/pilot_summary.csv`. The full `results.jsonl` files, including
+all LLM prompts and responses, are git-ignored and local only. This repository
+therefore contains compact evidence, **not** the complete raw LLM transcript.
+An independent rerun can produce different LLM outputs even with identical
+settings.
 
 ---
 
@@ -1165,24 +1213,38 @@ future version of this README will come from an actual recorded run in
   (see `verification/copilot_autogen_tests.txt`). Design rationale in
   [`docs/AUTOGEN_DESIGN.md`](docs/AUTOGEN_DESIGN.md).
 
-**Not yet completed — do not describe any of the following as done:**
-- [ ] **Real Docker integration testing** (next immediate step) — actually
-  launching the configured container against real timeout, resource
-  -limit, and malformed-candidate scenarios, not just mocked
-  `subprocess.run` calls. Applies to Methods A/B/C/D identically.
-- [ ] Real LLM API configuration (choosing and validating an actual
-  model/provider).
-- [ ] Two-problem pilot experiment.
-- [ ] Investigating and correcting any genuine issues the pilot surfaces.
-- [ ] Freezing the final experimental configuration.
-- [ ] Final 20-problem HumanEval experiment.
-- [ ] Benchmark performance analysis and results writeup.
+**Completed since the Path 2 pivot:**
+- [x] Real Docker integration tests (14), against the configured container,
+  with a report in [`verification/docker_integration_report.md`](verification/docker_integration_report.md).
+- [x] Real LLM API configuration (`gpt-4o-mini`, temperature 0, seed 42).
+- [x] Two-problem pilot, with findings in [`verification/pilot_findings_report.md`](verification/pilot_findings_report.md).
+- [x] Frozen configuration and final 20-problem HumanEval experiment.
+- [x] Benchmark analysis and report in [`verification/final_experiment_report.md`](verification/final_experiment_report.md).
+- [x] Full test suite: 100 passing.
+
+**Remaining work:**
+- [ ] Pre-register any larger experiment before running it.
+- [ ] Decide whether to add `numpy` to the sandbox image (a methodology change).
 - [ ] Slides and appendix preparation.
 
 ---
 
 ## 20. Limitations
 
+- **Reviewer behaviour.** The AutoGen reviewer never approved, so the
+  acceptance path was never exercised. Whether the reviewer prompt causes
+  excessive criticism is a hypothesis; no ablation was run.
+- **Model choice.** One model (`gpt-4o-mini`). Results may not transfer.
+- **Prompt design.** Prompts were written once and not tuned; a different
+  prompt could change the outcome.
+- **Missing numpy dependency.** The sandbox image lacks `numpy`, which
+  affects some candidates (HumanEval/105 and /163). This is an environment
+  compatibility limitation, not a production-code defect.
+- **Generated-test quality.** Several shared generated tests contradict the
+  public specification or use out-of-domain inputs (see the final report,
+  section 8). This affects internal acceptance and reviewer feedback.
+- **Public benchmark.** HumanEval is public; contamination cannot be ruled
+  out.
 - **Small sample size.** 20 main-experiment problems (plus a 2-problem
   pilot) cannot support a statistically significant claim on their own;
   results should be read as paired, qualitative evidence per problem.
@@ -1207,19 +1269,18 @@ future version of this README will come from an actual recorded run in
   broader, riskier heuristics that might reject legitimate tests.
 - **Docker isolation limitations.** Strong resource/capability
   restrictions, but explicitly not claimed to be a perfect security
-  boundary; live integration testing against a real daemon is still
-  pending.
+  boundary; 14 live integration tests run against a real Docker daemon.
+  They are not a formal security proof.
 - **Differences from an exact reproduction.** This is a from-scratch
   harness inspired by, not copied from, the original authors' released
   implementation; we have not systematically compared our control flow
   against theirs beyond the one Algorithm-1 observation noted in
   [Section 2](#2-academic-background-and-connection-between-our-presentations).
 - **Passing software tests is not the same as improved benchmark
-  performance.** All 67 passing tests in this repository validate the
-  *harness's* logical correctness using mocked LLMs and fixed fixtures —
-  they say nothing about whether a real LLM's reflections are actually
-  useful. That question is answered only by running the real benchmark,
-  which has not yet happened.
+  performance.** The 100 passing tests validate the *harness's* logical
+  correctness, using mocked LLMs, fixtures, and 14 Docker integration tests.
+  They do not show whether a real LLM's reflections help. That question is
+  addressed only by the 20-problem run in Section 18, which is a small sample.
 
 ---
 
@@ -1241,7 +1302,7 @@ git checkout -b your-name/your-feature
 # 4. Set up the environment and confirm the baseline still passes
 python3 -m venv .venv && source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pytest -v tests/        # expect 67 passed
+python -m pytest -v tests/        # expect 100 passed
 
 # 5. Inspect verification evidence before changing anything
 #    (read in this order — see Section 9's reading order for full code)

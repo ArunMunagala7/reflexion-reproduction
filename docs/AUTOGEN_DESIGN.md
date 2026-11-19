@@ -362,15 +362,32 @@ see Section 13).
 - Implementation: complete (`autogen_agents.py`, `experiment.py`,
   `analyze_results.py` updated; backward-compatible `--include-autogen`
   flag; `config.json` now records the selected `methods` list).
-- Software verification: complete using mocked LLM responses and real
-  `BaseChatAgent`/`TextMessage`/`Response` objects
-  (`tests/test_autogen_agents.py`); full suite including the preserved
-  Path 1 tests: **83/83 passing** (see
-  `verification/copilot_autogen_tests.txt`).
-- **Not yet done:** running `experiment.py --include-autogen --pilot`
-  against the real `python:3.11-slim` Docker image and a real,
-  configured LLM endpoint. The codebase appears ready for this next
-  step (the `DockerEvaluator` code path for Method D is identical to
-  Methods B/C -- it calls the same `internal`/`heldout` methods with
-  the same argument shapes), but this has not been empirically
-  confirmed and no real benchmark numbers exist yet.
+- Software verification (mocked LLM): complete using scripted mock LLM
+  responses and real `BaseChatAgent`/`TextMessage`/`Response` objects
+  (`tests/test_autogen_agents.py`); 83/83 passing including the
+  preserved Path 1 tests.
+- **Real Docker integration verification: complete.**
+  `tests/test_docker_integration.py` (14 tests) exercises the real,
+  unmodified `evaluator.DockerEvaluator` against the real
+  `python:3.11-slim` image -- no `subprocess` mocking -- covering
+  correct/incorrect/raising/syntax-error candidates, missing/
+  non-callable entry points, the empty-test short-circuit, real timeout
+  enforcement and container cleanup, real `--network none` isolation,
+  real read-only-root-filesystem + writable-`/tmp` behavior, and real
+  held-out scoring against the actual HumanEval/0 canonical solution.
+  Verified on macOS (Docker Desktop 29.1.2, aarch64, 12 CPUs, 7.65 GiB
+  memory; `python:3.11.18` inside the container; HumanEval dataset,
+  164 problems, SHA256 `b796127e635a67f93fb35c04f4cb03cf06f38c8072ee7cee8833d7bee06979ef`).
+  Full suite including Docker integration tests: **97/97 passing**
+  (`verification/copilot_full_suite_with_docker.txt`). No interference
+  with unrelated pre-existing containers on the host; no `reflexion-*`
+  containers left behind afterward.
+- Because Method D's Docker code path (`DockerEvaluator.internal` /
+  `.heldout`) is identical to Methods B/C's, this Docker integration
+  verification applies equally to Method D -- no AutoGen-specific Docker
+  behavior exists to verify separately.
+- **Not yet done:** a real LLM benchmark run (`experiment.py
+  --include-autogen --pilot` or the full count, against a configured,
+  paid LLM endpoint). The codebase is now verified ready for this next
+  step at both the software-logic layer and the real-Docker layer; no
+  further infrastructure blockers are known.

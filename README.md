@@ -2,7 +2,9 @@
 
 **Authors:** Arun Munagala and Anuj Prakash
 **Course:** Introduction to Computer Engineering, Indiana University
-**Status:** Harness implemented and verified. Real LLM/Docker experiments **not yet run** (see [Section 19](#19-current-project-status-and-remaining-work)).
+**Status:** Harness implemented and verified, including real Docker
+integration tests. Real LLM benchmark experiments **not yet run** (see
+[Section 19](#19-current-project-status-and-remaining-work)).
 
 > ## 📢 Path 2 update: AutoGen proactive review (Method D)
 > Our final research direction has moved from Path 1 (this Reflexion

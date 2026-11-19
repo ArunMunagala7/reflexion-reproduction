@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.7, pytest-9.2.0, pluggy-1.7.0 -- /Users/arunmunagala/Documents/Laptop Folders/IUB Material/Semester 3/Intro to CE/Presentation 3 Requirement/reflexion-reproduction/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/arunmunagala/Documents/Laptop Folders/IUB Material/Semester 3/Intro to CE/Presentation 3 Requirement/reflexion-reproduction
+plugins: anyio-4.16.0
+collecting ... collected 3 items
+
+tests/test_autogen_e2e_scripted.py::test_four_method_scripted_run PASSED [ 33%]
+tests/test_autogen_e2e_scripted.py::test_humaneval_1_canonical_pass_and_wrong_fail PASSED [ 66%]
+tests/test_autogen_e2e_scripted.py::test_analysis_pipeline_on_synthetic_rows PASSED [100%]
+
+============================== 3 passed in 2.63s ===============================

@@ -10,6 +10,7 @@ class Response:
     input_tokens: int = 0
     output_tokens: int = 0
     seconds: float = 0.0
+    tokens_available: bool = True
 
 
 class LLM:
@@ -27,11 +28,16 @@ class LLM:
             model=self.model, temperature=self.temperature, max_tokens=2000,
             messages=[{'role': 'user', 'content': prompt}])
         u = result.usage
+        tokens_available = u is not None
         text = result.choices[0].message.content or ''
-        event = Response(text, u.prompt_tokens if u else 0, u.completion_tokens if u else 0,
-                         time.monotonic() - start)
+        event = Response(text, u.prompt_tokens if u else None, u.completion_tokens if u else None,
+                         time.monotonic() - start, tokens_available)
         self.events.append({'stage': stage, 'prompt': prompt, 'response': text,
                             'input_tokens': event.input_tokens, 'output_tokens': event.output_tokens,
+                            'tokens_available': tokens_available,
                             'seconds': event.seconds, 'resolved_model': result.model,
                             'finish_reason': result.choices[0].finish_reason})
+        if not tokens_available:
+            print(f'WARNING: provider returned no token usage data for stage={stage!r}; '
+                  'recording as unavailable, not zero.')
         return event

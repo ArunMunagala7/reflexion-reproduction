@@ -14,8 +14,19 @@ from llm import LLM
 
 
 def stats(events):
-    return {'calls': len(events), 'input_tokens': sum(e['input_tokens'] for e in events),
-            'output_tokens': sum(e['output_tokens'] for e in events),
+    """Sums token usage only over events where the provider actually
+    returned usage data. 'input_tokens'/'output_tokens' are None (not 0)
+    if NO event in this arm had usage data available, so downstream
+    analysis cannot silently misread "no data" as "zero cost". When some
+    but not all events are missing usage, the sum covers only the
+    available events and 'tokens_available' is still reported False to
+    flag that the total is partial, not complete."""
+    measured = [e for e in events if e.get('tokens_available', True)]
+    all_available = len(measured) == len(events)
+    input_tokens = sum(e['input_tokens'] for e in measured) if measured else None
+    output_tokens = sum(e['output_tokens'] for e in measured) if measured else None
+    return {'calls': len(events), 'input_tokens': input_tokens,
+            'output_tokens': output_tokens, 'tokens_available': all_available,
             'api_seconds': sum(e['seconds'] for e in events)}
 
 

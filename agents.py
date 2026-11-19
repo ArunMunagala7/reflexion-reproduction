@@ -30,11 +30,14 @@ def iterate(llm, evaluator, problem, initial, tests, use_reflection, max_attempt
         if evaluation.passed:
             reason = 'internal_pass'
             break
+        if not tests:
+            # Checked before the attempt-limit condition so the recorded
+            # stop_reason reflects the true cause (no valid generated tests)
+            # even when emptiness is only discovered on the final attempt.
+            reason = 'no_valid_tests'
+            break
         if attempt == max_attempts:
             reason = 'trial_limit'
-            break
-        if not tests:
-            reason = 'no_valid_tests'
             break
         context = (f"Problem specification:\n{problem['prompt']}\n\nPrevious code:\n{code}\n\n"
                    f"Internal tests:\n" + '\n'.join(tests) + f"\n\nInternal failure feedback:\n{evaluation.feedback}")

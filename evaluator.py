@@ -27,8 +27,66 @@ def strip_fence(text):
     return text
 
 
+def _is_constant_shortcircuit(node):
+    """Detect `<constant> or <expr>` / `<expr> or <constant-true>` and
+    `<constant> and <expr>` shapes where a literal boolean/constant operand
+    makes the other operand's evaluation unnecessary (e.g. `True or f(1)==2`,
+    `False and f(1)==2`). Conservative: only fires on ast.Constant operands,
+    never on names, calls, or other expressions, so legitimate boolean
+    combinations of real conditions are never rejected by this check."""
+    if not isinstance(node, ast.BoolOp):
+        return False
+    return any(isinstance(v, ast.Constant) for v in node.values)
+
+
+def _is_identical_expression_selfcompare(node):
+    """Detect `<expr> == <expr>` (or chained comparisons) where the
+    left and right sides are syntactically identical (via ast.dump),
+    e.g. `f(1) == f(1)`. This passes for any deterministic function
+    regardless of correctness and is rejected conservatively: only exact
+    structural duplicates are flagged, never merely "the same function
+    called twice" with different arguments (e.g. `f(f(1)) == 3` or
+    `f(1) + f(2) == 5` are NOT rejected by this check)."""
+    if not isinstance(node, ast.Compare):
+        return False
+    if len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
+        return False
+    left_dump = ast.dump(node.left)
+    return any(ast.dump(comp) == left_dump for comp in node.comparators)
+
+
+def _contains_vacuous_pattern(node):
+    """Walk the assertion's test expression looking for either obvious
+    vacuous shape, anywhere in the expression tree (so e.g. a vacuous
+    sub-clause nested inside a larger boolean expression is still caught)."""
+    for sub in ast.walk(node):
+        if _is_constant_shortcircuit(sub) or _is_identical_expression_selfcompare(sub):
+            return True
+    return False
+
+
 def parse_tests(text, entry_point):
-    """Require 1–6 top-level asserts that call the target function."""
+    """Require 1–6 top-level asserts that call the target function.
+
+    Additionally rejects two specific, obvious vacuous-assertion shapes
+    that can pass regardless of candidate correctness:
+
+      1. Constant short-circuit: a boolean `or`/`and` expression with a
+         literal constant operand, e.g. `True or f(1) == 2`, where the
+         call to entry_point is never actually evaluated.
+      2. Identical-expression self-comparison: `<expr> == <expr>` where
+         both sides are syntactically identical, e.g. `f(1) == f(1)`,
+         which passes for any deterministic function.
+
+    This is a conservative, AST-based heuristic. It does not attempt to
+    verify semantic correctness of expected values, and it does not reject
+    every assertion with multiple calls to entry_point or every assertion
+    using boolean operators -- only the two obvious shapes above. Legitimate
+    property-based or compound assertions (e.g. `f(f(1)) == 3`,
+    `f(1) + f(2) == 5`) remain accepted. Incomplete or semantically
+    incorrect generated tests that do not match these specific shapes
+    remain a known, unaddressed limitation of LLM-generated testing.
+    """
     try:
         tree = ast.parse(strip_fence(text))
     except SyntaxError:
@@ -40,6 +98,8 @@ def parse_tests(text, entry_point):
     for node in tree.body:
         if not any(isinstance(x, ast.Call) and isinstance(x.func, ast.Name)
                    and x.func.id == entry_point for x in ast.walk(node.test)):
+            return []
+        if _contains_vacuous_pattern(node.test):
             return []
     return [ast.unparse(node) for node in tree.body]
 

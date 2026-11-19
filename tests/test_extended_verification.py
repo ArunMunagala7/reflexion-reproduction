@@ -97,17 +97,26 @@ class MockEvaluator:
 # INVESTIGATION 1: Potentially meaningless generated tests
 # ===========================================================================
 
-def test_inv1_parser_accepts_shortcircuit_assertion():
-    """parse_tests accepts 'assert True or f(1) == 2' because it only checks that
-    a Call node to entry_point exists SOMEWHERE in the AST subtree, not that it
-    is actually reached at runtime."""
+def test_inv1_parser_rejects_shortcircuit_assertion():
+    """RECONCILED (Stage 3 correction): originally this test asserted that
+    parse_tests ACCEPTED 'assert True or f(1) == 2', because the parser only
+    checked that a Call node to entry_point existed SOMEWHERE in the AST
+    subtree, not that it was actually reached at runtime. That was the
+    confirmed defect from Investigation 1. The generated-test validation
+    policy was corrected in evaluator.py::parse_tests (via
+    _is_constant_shortcircuit) to reject this specific vacuous shape. This
+    test now asserts the corrected, intended behavior: rejection."""
     accepted = parse_tests(VACUOUS_SHORTCIRCUIT, 'f')
-    assert accepted == [VACUOUS_SHORTCIRCUIT]
+    assert accepted == []
 
 
-def test_inv1_parser_accepts_selfcompare_assertion():
+def test_inv1_parser_rejects_selfcompare_assertion():
+    """RECONCILED (Stage 3 correction): originally asserted acceptance of
+    'assert f(1) == f(1)'. Corrected via
+    evaluator.py::_is_identical_expression_selfcompare; now asserts the
+    intended rejection."""
     accepted = parse_tests(VACUOUS_SELFCOMPARE, 'f')
-    assert accepted == [VACUOUS_SELFCOMPARE]
+    assert accepted == []
 
 
 def test_inv1_wrong_fixture_passes_shortcircuit_vacuous_test():
@@ -127,13 +136,23 @@ def test_inv1_wrong_fixture_passes_selfcompare_vacuous_test():
     assert result['passed'] is True
 
 
-def test_inv1_shortcircuit_passes_even_if_entry_point_undefined():
-    """The short-circuit assertion passes even when f is never defined at all,
-    because the right-hand operand is never evaluated. This demonstrates the
-    parser's static Call-presence check gives no runtime guarantee."""
+def test_inv1_shortcircuit_no_longer_masks_undefined_entry_point():
+    """RECONCILED (Stage 3 correction): originally this test asserted that the
+    short-circuit assertion PASSED even when f is never defined at all,
+    because the right-hand operand of `or` is never evaluated and
+    sandbox_runner.evaluate had no independent check that the entry point
+    existed. That was a confirmed defect (Investigation 1, point 3).
+    sandbox_runner.py::evaluate was corrected to explicitly verify the
+    entry point exists and is callable BEFORE running any assertion
+    (check_entry_point), independent of whether the assertion itself would
+    have exercised it. This test now asserts the corrected behavior:
+    failure, with a message identifying the missing entry point rather than
+    a NameError leaking from the assertion itself (the assertion is never
+    even reached now)."""
     result = evaluate({'kind': 'internal', 'code': UNDEFINED,
                         'tests': [VACUOUS_SHORTCIRCUIT], 'entry_point': 'f'})
-    assert result['passed'] is True
+    assert result['passed'] is False
+    assert "was not defined" in result['feedback']
 
 
 def test_inv1_meaningful_assertion_correctly_rejects_wrong_fixture():
@@ -146,27 +165,41 @@ def test_inv1_meaningful_assertion_correctly_rejects_wrong_fixture():
 
 
 def test_inv1_meaningful_assertion_rejects_undefined_entry_point():
-    """A meaningful assertion against an undefined entry point fails with a
-    NameError-derived failure message, rather than silently passing."""
+    """RECONCILED (Stage 3 correction): originally this test asserted the
+    failure message contained 'NameError', because without an explicit
+    entry-point check, Python's own exec() raised NameError when the
+    assertion tried to call the undefined function. After the correction,
+    sandbox_runner.evaluate's explicit check_entry_point runs BEFORE the
+    assertion executes at all, so the assertion's NameError is now
+    pre-empted by a clearer, purpose-built message. The outcome
+    (passed is False) is unchanged and still correctly established; only
+    the specific feedback text changed as an intended side effect of the
+    correction, which this test now reflects."""
     result = evaluate({'kind': 'internal', 'code': UNDEFINED,
                         'tests': TESTS, 'entry_point': 'f'})
     assert result['passed'] is False
-    assert 'NameError' in result['feedback']
+    assert "was not defined" in result['feedback']
 
 
-def test_inv1_no_explicit_entrypoint_existence_or_callability_check():
-    """There is no explicit, dedicated check (in parse_tests or evaluate) that
-    entry_point exists and is callable before running tests. Correctness is
-    only an emergent property of whichever assertions happen to be present:
-    a vacuous assertion masks a non-callable entry point, while a meaningful
-    assertion exposes it via a raised, caught exception."""
+def test_inv1_explicit_entrypoint_existence_and_callability_check_now_present():
+    """RECONCILED (Stage 3 correction): originally this test asserted there was
+    NO explicit, dedicated check that entry_point exists and is callable, and
+    demonstrated that a vacuous assertion could MASK a non-callable entry
+    point (vacuous['passed'] was True) while only a meaningful assertion
+    exposed it. sandbox_runner.py::evaluate now calls check_entry_point
+    before executing ANY assertion (vacuous or meaningful), so a
+    non-callable entry point is caught uniformly regardless of which
+    assertion shape happens to be present. This test now asserts that both
+    the previously-masked vacuous case and the previously-exposed
+    meaningful case correctly fail."""
     vacuous = evaluate({'kind': 'internal', 'code': NONCALLABLE,
                         'tests': [VACUOUS_SHORTCIRCUIT], 'entry_point': 'f'})
     meaningful = evaluate({'kind': 'internal', 'code': NONCALLABLE,
                            'tests': TESTS, 'entry_point': 'f'})
-    assert vacuous['passed'] is True       # masked
-    assert meaningful['passed'] is False   # exposed (TypeError: 'int' object is not callable)
-    assert 'TypeError' in meaningful['feedback']
+    assert vacuous['passed'] is False       # previously masked; now caught
+    assert meaningful['passed'] is False    # previously exposed; still caught
+    assert 'not callable' in vacuous['feedback']
+    assert 'not callable' in meaningful['feedback']
 
 
 def test_inv1_legitimate_multi_call_test_is_not_rejected():
@@ -202,17 +235,23 @@ def test_inv2_max_attempts_one_failing():
 
 
 def test_inv2_max_attempts_one_no_valid_tests():
-    """ACTUAL OBSERVED BEHAVIOR: with max_attempts=1 and empty tests, the code
-    checks `attempt == max_attempts` BEFORE the `not tests` branch, so the
-    loop exits with stop_reason == 'trial_limit', NOT 'no_valid_tests', even
-    though the true cause of non-evaluation was the empty test list. This
-    confirms the ambiguity flagged in the technical audit: 'no_valid_tests'
-    only appears when emptiness is discovered strictly before the final
-    attempt."""
+    """RECONCILED (Stage 3 correction): originally this test asserted the
+    AMBIGUOUS, confirmed-defective behavior -- with max_attempts=1 and empty
+    tests, agents.py::iterate checked `attempt == max_attempts` BEFORE
+    `not tests`, so stop_reason was 'trial_limit' even though the true cause
+    was an empty test list. This was the ambiguity flagged in the technical
+    audit and confirmed in Investigation 2. agents.py::iterate was corrected
+    to check `not tests` before the attempt-limit condition, so the
+    recorded reason now reflects the true cause regardless of which attempt
+    discovers it. This test now asserts the corrected, unambiguous
+    behavior. (Identical in substance to
+    tests/test_regressions.py::test_regr_10_no_valid_tests_precedes_trial_limit_at_max_attempts_one;
+    kept here too since this file is the canonical home of the original
+    Investigation 2 characterization.)"""
     llm = MockLLM()
     result = iterate(llm, MockEvaluator(), PUBLIC, BAD, [], True, max_attempts=1)
     assert result['attempts'] == 1
-    assert result['stop_reason'] == 'trial_limit'  # NOT 'no_valid_tests'
+    assert result['stop_reason'] == 'no_valid_tests'
     assert result['internal_pass'] is False
     assert llm.events == []
 
@@ -512,9 +551,16 @@ def test_inv5_missing_entry_point_cannot_produce_misleading_success_under_meanin
 
 
 def test_inv5_noncallable_entry_point_cannot_produce_misleading_success_under_meaningful_test():
+    """RECONCILED (Stage 3 correction): originally asserted the failure
+    message contained 'TypeError', because Python itself raised TypeError
+    when the assertion tried to call the non-callable `f`. After the
+    correction, sandbox_runner.evaluate's explicit check_entry_point catches
+    this before the assertion executes, producing a clearer, purpose-built
+    message instead. The outcome (passed is False) is unchanged; only the
+    feedback text changed as an intended side effect of the correction."""
     result = evaluate({'kind': 'internal', 'code': NONCALLABLE, 'tests': TESTS, 'entry_point': 'f'})
     assert result['passed'] is False
-    assert 'TypeError' in result['feedback']
+    assert 'not callable' in result['feedback']
 
 
 # --- Mocked Docker subprocess behavior (no real containers launched) -------

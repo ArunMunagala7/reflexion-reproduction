@@ -1,0 +1,131 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.7, pytest-9.2.0, pluggy-1.7.0 -- /Users/arunmunagala/Documents/Laptop Folders/IUB Material/Semester 3/Intro to CE/Presentation 3 Requirement/reflexion-reproduction/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/arunmunagala/Documents/Laptop Folders/IUB Material/Semester 3/Intro to CE/Presentation 3 Requirement/reflexion-reproduction
+plugins: anyio-4.16.0
+collecting ... collected 11 items
+
+tests/test_regressions.py::test_regr_01_vacuous_constant_shortcircuit_rejected FAILED [  9%]
+tests/test_regressions.py::test_regr_02_identical_expression_selfcompare_rejected FAILED [ 18%]
+tests/test_regressions.py::test_regr_03_ordinary_meaningful_assertion_still_accepted PASSED [ 27%]
+tests/test_regressions.py::test_regr_04_property_based_different_inputs_not_rejected PASSED [ 36%]
+tests/test_regressions.py::test_regr_05_valid_nested_comparison_not_accidentally_rejected PASSED [ 45%]
+tests/test_regressions.py::test_regr_06_missing_entry_point_cannot_pass_internal_evaluation FAILED [ 54%]
+tests/test_regressions.py::test_regr_07_noncallable_entry_point_cannot_pass_internal_evaluation FAILED [ 63%]
+tests/test_regressions.py::test_regr_08_valid_callable_entry_point_remains_supported PASSED [ 72%]
+tests/test_regressions.py::test_regr_09_empty_suite_cannot_establish_success PASSED [ 81%]
+tests/test_regressions.py::test_regr_10_no_valid_tests_precedes_trial_limit_at_max_attempts_one FAILED [ 90%]
+tests/test_regressions.py::test_regr_11_missing_token_usage_marked_unavailable_not_zero FAILED [100%]
+
+=================================== FAILURES ===================================
+_____________ test_regr_01_vacuous_constant_shortcircuit_rejected ______________
+
+    def test_regr_01_vacuous_constant_shortcircuit_rejected():
+        """Generated-test policy must reject an assertion that trivially succeeds
+        via a constant short-circuit operand (e.g. `True or ...`), since the
+        right-hand call to entry_point is never evaluated."""
+>       assert parse_tests(VACUOUS_SHORTCIRCUIT, 'f') == []
+E       AssertionError: assert ['assert True or f(1) == 2'] == []
+E         
+E         Left contains one more item: 'assert True or f(1) == 2'
+E         
+E         Full diff: (-: missing in left side, +: extra in left side)
+E         - []
+E         + [
+E         +     'assert True or f(1) == 2',
+E         + ]
+
+tests/test_regressions.py:71: AssertionError
+____________ test_regr_02_identical_expression_selfcompare_rejected ____________
+
+    def test_regr_02_identical_expression_selfcompare_rejected():
+        """Generated-test policy must reject an assertion comparing two
+        syntactically identical calls to entry_point (`f(1) == f(1)`), since it
+        passes for any deterministic function regardless of correctness."""
+>       assert parse_tests(VACUOUS_SELFCOMPARE, 'f') == []
+E       AssertionError: assert ['assert f(1) == f(1)'] == []
+E         
+E         Left contains one more item: 'assert f(1) == f(1)'
+E         
+E         Full diff: (-: missing in left side, +: extra in left side)
+E         - []
+E         + [
+E         +     'assert f(1) == f(1)',
+E         + ]
+
+tests/test_regressions.py:78: AssertionError
+_______ test_regr_06_missing_entry_point_cannot_pass_internal_evaluation _______
+
+    def test_regr_06_missing_entry_point_cannot_pass_internal_evaluation():
+        """Even if a vacuous-shaped test string reaches evaluate() directly
+        (bypassing parse_tests, as a defense-in-depth check), a candidate that
+        never defines entry_point must not be scored as passed."""
+        result = evaluate({'kind': 'internal', 'code': UNDEFINED,
+                            'tests': [VACUOUS_SHORTCIRCUIT], 'entry_point': 'f'})
+>       assert result['passed'] is False
+E       assert True is False
+
+tests/test_regressions.py:113: AssertionError
+_____ test_regr_07_noncallable_entry_point_cannot_pass_internal_evaluation _____
+
+    def test_regr_07_noncallable_entry_point_cannot_pass_internal_evaluation():
+        result = evaluate({'kind': 'internal', 'code': NONCALLABLE,
+                            'tests': [VACUOUS_SHORTCIRCUIT], 'entry_point': 'f'})
+>       assert result['passed'] is False
+E       assert True is False
+
+tests/test_regressions.py:119: AssertionError
+_____ test_regr_10_no_valid_tests_precedes_trial_limit_at_max_attempts_one _____
+
+    def test_regr_10_no_valid_tests_precedes_trial_limit_at_max_attempts_one():
+        """With max_attempts=1 and an empty test list, the intended stop_reason
+        is 'no_valid_tests' (the true cause), not 'trial_limit'."""
+        llm = MockLLM()
+        result = iterate(llm, MockEvaluator(), PUBLIC, BAD, [], True, max_attempts=1)
+        assert result['attempts'] == 1
+>       assert result['stop_reason'] == 'no_valid_tests'
+E       AssertionError: assert 'trial_limit' == 'no_valid_tests'
+E         
+E         - no_valid_tests
+E         + trial_limit
+
+tests/test_regressions.py:143: AssertionError
+_________ test_regr_11_missing_token_usage_marked_unavailable_not_zero _________
+
+    def test_regr_11_missing_token_usage_marked_unavailable_not_zero():
+        """When the provider returns no usage block, the logged event must
+        explicitly distinguish 'usage unavailable' from 'measured zero tokens'.
+        Pre-correction, llm.py unconditionally records 0 for both input and
+        output tokens with no distinguishing flag; this test is expected to FAIL
+        against the unmodified implementation and PASS after the correction."""
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy-not-a-real-key'}, clear=False), \
+             patch('openai.OpenAI', _FakeOpenAIClient):
+            import importlib
+            import llm as llm_module
+            importlib.reload(llm_module)  # ensure patched OpenAI is picked up
+            instance = llm_module.LLM('fixture-model')
+            instance.ask('initial_code', 'irrelevant prompt')
+            event = instance.events[-1]
+            # The correction must expose an explicit availability indicator
+            # (e.g. event['tokens_available'] is False, or tokens are None)
+            # rather than silently recording measured 0 usage.
+            tokens_available = event.get('tokens_available', 'MISSING_KEY')
+>           assert tokens_available is False or (
+                event['input_tokens'] is None and event['output_tokens'] is None
+            ), (
+                "Expected an explicit unavailable-usage indicator (tokens_available=False, "
+                "or input/output tokens set to None) when the provider returns no usage block; "
+                f"got event={event}"
+            )
+E           AssertionError: Expected an explicit unavailable-usage indicator (tokens_available=False, or input/output tokens set to None) when the provider returns no usage block; got event={'stage': 'initial_code', 'prompt': 'irrelevant prompt', 'response': 'fixture response', 'input_tokens': 0, 'output_tokens': 0, 'seconds': 4.916917532682419e-06, 'resolved_model': 'fixture-model', 'finish_reason': 'stop'}
+E           assert ('MISSING_KEY' is False or (0 is None))
+
+tests/test_regressions.py:202: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_regressions.py::test_regr_01_vacuous_constant_shortcircuit_rejected
+FAILED tests/test_regressions.py::test_regr_02_identical_expression_selfcompare_rejected
+FAILED tests/test_regressions.py::test_regr_06_missing_entry_point_cannot_pass_internal_evaluation
+FAILED tests/test_regressions.py::test_regr_07_noncallable_entry_point_cannot_pass_internal_evaluation
+FAILED tests/test_regressions.py::test_regr_10_no_valid_tests_precedes_trial_limit_at_max_attempts_one
+FAILED tests/test_regressions.py::test_regr_11_missing_token_usage_marked_unavailable_not_zero
+========================= 6 failed, 5 passed in 0.59s ==========================

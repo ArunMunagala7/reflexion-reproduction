@@ -4,6 +4,20 @@
 **Course:** Introduction to Computer Engineering, Indiana University
 **Status:** Harness implemented and verified. Real LLM/Docker experiments **not yet run** (see [Section 19](#19-current-project-status-and-remaining-work)).
 
+> ## 📢 Path 2 update: AutoGen proactive review (Method D)
+> Our final research direction has moved from Path 1 (this Reflexion
+> reproduction alone) to **Path 2**: using this verified Reflexion
+> implementation as an experimental **baseline** for a new comparison
+> against a fourth method, **AutoGen proactive multi-agent review**,
+> built with the real `autogen-agentchat` framework. Everything below
+> describing Methods A/B/C (baseline, testing, Reflexion) is unchanged
+> and preserved exactly as verified. For the new Method D, see
+> **[`docs/AUTOGEN_DESIGN.md`](docs/AUTOGEN_DESIGN.md)** (research
+> motivation, architecture, algorithm, metrics, limitations) and
+> [Section 17](#17-running-the-experiment) for the `--include-autogen`
+> flag. The `path1-reflexion-reproduction` branch preserves this work
+> exactly as it stood before the Path 2 pivot.
+
 > For a deep, function-by-function walkthrough of every module, see
 > [`docs/IMPLEMENTATION_GUIDE.md`](docs/IMPLEMENTATION_GUIDE.md). This README
 > is the entry point; the guide is the reference manual.
@@ -1043,6 +1057,23 @@ analyze an incomplete or duplicated run), then writes `summary.csv`,
 `accuracy.png`, and `tokens.png`, and prints a paired Reflexion-vs-Testing
 comparison to stdout.
 
+**7. Include Method D (AutoGen proactive review)** *(available, not yet
+run; requires `pip install -r requirements.txt` to have installed
+`autogen-agentchat==0.7.5`)*
+```bash
+python experiment.py --pilot --include-autogen --out results/pilot_with_autogen
+python analyze_results.py results/pilot_with_autogen
+```
+`--include-autogen` adds a fourth `autogen` mode alongside
+baseline/testing/reflexion for every sampled problem, using the same
+model, same shared initial candidate, and same shared generated tests.
+Without this flag, the experiment behaves exactly as before (three
+methods only); `autogen-agentchat` is only imported when this flag is
+passed, so the original three-method experiment never requires it to be
+installed. See [`docs/AUTOGEN_DESIGN.md`](docs/AUTOGEN_DESIGN.md) for the
+full algorithm and [Section 18](#18-results-and-output-interpretation)
+for the additional fields this adds to `results.jsonl`/`summary.csv`.
+
 **Full flag reference** (from `experiment.py`):
 
 | Flag | Default | Meaning |
@@ -1051,8 +1082,9 @@ comparison to stdout.
 | `--data` | `data/HumanEval.jsonl.gz` | Path to the dataset file. |
 | `--count` | `20` | Number of main-experiment problems to sample. |
 | `--seed` | `42` | Random seed for reproducible sampling. |
-| `--max-attempts` | `3` | Candidate-attempt budget for Methods B/C. |
+| `--max-attempts` | `3` | Candidate-attempt budget for Methods B/C/D. |
 | `--pilot` | off | Use the fixed 2-problem pilot set instead of sampling. |
+| `--include-autogen` | off | Also run Method D (AutoGen proactive review). |
 | `--out` | *(required)* | Output directory; must not already exist. |
 
 ---
@@ -1122,12 +1154,20 @@ future version of this README will come from an actual recorded run in
 - [x] Four targeted implementation corrections.
 - [x] Full reevaluation: 67/67 tests passing.
 - [x] This documentation pass (README + implementation guide).
+- [x] **Path 2 pivot:** Method D (AutoGen proactive review) implemented
+  on a separate `path2-autogen` branch (`autogen_agents.py`), integrated
+  into `experiment.py` behind `--include-autogen`, and
+  `analyze_results.py` updated to validate/report both three- and
+  four-method experiments. 16 new executable verification tests added
+  (`tests/test_autogen_agents.py`); full suite **83/83 passing**
+  (see `verification/copilot_autogen_tests.txt`). Design rationale in
+  [`docs/AUTOGEN_DESIGN.md`](docs/AUTOGEN_DESIGN.md).
 
 **Not yet completed — do not describe any of the following as done:**
 - [ ] **Real Docker integration testing** (next immediate step) — actually
   launching the configured container against real timeout, resource
   -limit, and malformed-candidate scenarios, not just mocked
-  `subprocess.run` calls.
+  `subprocess.run` calls. Applies to Methods A/B/C/D identically.
 - [ ] Real LLM API configuration (choosing and validating an actual
   model/provider).
 - [ ] Two-problem pilot experiment.

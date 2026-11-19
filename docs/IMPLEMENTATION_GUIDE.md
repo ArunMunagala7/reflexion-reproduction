@@ -7,6 +7,12 @@ assumes that context and focuses purely on "what does this function do,
 what are its inputs/outputs, and how does it connect to the rest of the
 system."
 
+> **Path 2 note:** Method D (AutoGen proactive review) is covered in its
+> own section below (`autogen_agents.py`) and in full design detail in
+> [`docs/AUTOGEN_DESIGN.md`](AUTOGEN_DESIGN.md). Methods A/B/C
+> (`dataset.py`, `llm.py`, `agents.py`, `evaluator.py`,
+> `sandbox_runner.py`) are unchanged from Path 1.
+
 ---
 
 ## `dataset.py`
@@ -344,6 +350,100 @@ summary statistics and plots.
 - Prints a paired comparison dict: counts of problems solved by
   Reflexion-but-not-Testing and vice versa, computed directly from
   `results.jsonl`, not from `summary.csv`.
+
+---
+
+## `autogen_agents.py` *(Path 2 addition)*
+
+**Purpose:** Method D (AutoGen proactive review). See
+[`docs/AUTOGEN_DESIGN.md`](AUTOGEN_DESIGN.md) for the full research
+rationale and algorithm walkthrough; this section covers only the code
+structure.
+
+### `ProgrammerAgent` / `ReviewerAgent` (both `BaseChatAgent` subclasses)
+- Hold exactly three attributes each: `_name`, `_description` (set by
+  `BaseChatAgent.__init__`), and `_llm` (the shared `LLM` instance). No
+  conversation history or per-problem state is ever cached on the
+  instance itself.
+- `on_messages(messages, cancellation_token)` reads only
+  `messages[-1].content` (the single prompt string built by the
+  controller for that turn), calls `self._llm.ask(stage, prompt)`
+  synchronously, and wraps the result in a `Response(chat_message=
+  TextMessage(...))`. `ProgrammerAgent` additionally applies
+  `evaluator.strip_fence` to the result before returning it.
+- `on_reset` is a required `BaseChatAgent` abstract method; implemented
+  as a no-op since these agents hold no resettable state.
+
+### `parse_review_response(text) -> dict`
+- Strict: returns `{'valid': False, 'decision': None, 'feedback': ''}`
+  for anything that is not valid JSON, not a JSON object, has a
+  `'decision'` other than exactly `'APPROVE'`/`'REVISE'`, or has a
+  non-string `'feedback'`.
+- Never infers or defaults to approval under any malformed-input path.
+
+### `build_reviewer_prompt` / `build_programmer_prompt`
+- Pure string-building functions (no I/O). Both receive only the public
+  problem view (`problem['prompt']`, `problem['entry_point']`), the
+  current candidate, the shared generated tests, and the current
+  `Evaluation` — never `problem['test']` or
+  `problem['canonical_solution']`.
+
+### `_run_autogen_review_async` / `run_autogen_review`
+- `run_autogen_review` is the synchronous entry point used by
+  `experiment.py` (matching `agents.iterate`'s call shape); it wraps the
+  `async def _run_autogen_review_async` coroutine in `asyncio.run(...)`.
+- Constructs a brand-new `ProgrammerAgent`/`ReviewerAgent` pair on every
+  call (i.e., once per HumanEval problem) — this is the literal
+  implementation of "no cross-problem agent state."
+- `history[i]['messages']` records the literal `TextMessage` contents
+  exchanged that attempt (controller→reviewer, reviewer→controller,
+  controller→programmer, programmer→controller), in addition to the
+  standard `llm.events` log (stages `'autogen_reviewer'` /
+  `'autogen_programmer'`).
+- Returns `workflow_accept` (`True` only when `evaluation.passed and
+  parsed['valid'] and parsed['decision'] == 'APPROVE'`) and
+  `review_calls` (count of attempts where the reviewer was actually
+  invoked — can be less than `attempts` only in the `no_valid_tests`
+  case, since every other attempt triggers exactly one reviewer call).
+
+## `experiment.py` — Path 2 additions
+
+- `solve_problem` gained an optional `autogen_fn` parameter (defaults to
+  `None`). When provided, it is called with the exact same shared
+  `code`/`tests` as Methods B/C, after they have both completed, and its
+  result is added as a fourth `'autogen'` group before held-out scoring.
+- `main()` gained `--include-autogen`; `autogen_agents` is imported
+  **only** inside `main()` and only when this flag is passed, so running
+  the original three-method experiment never requires
+  `autogen-agentchat` to be installed.
+- `config.json` gained a `'methods'` list (e.g. `['baseline', 'testing',
+  'reflexion']` or with `'autogen'` appended) and an `'include_autogen'`
+  boolean, so `analyze_results.py` can validate the correct set of
+  `(task_id, mode)` pairs for either a three- or four-method run.
+- Row construction now computes `workflow_accept` (identical to
+  `internal_pass` for baseline/testing/reflexion; read from the AutoGen
+  result's own `workflow_accept` for that mode) and
+  `workflow_false_accept` (`workflow_accept and not heldout_pass`),
+  alongside the pre-existing `false_accept` (`internal_pass and not
+  heldout_pass`), so test-level and workflow-level false acceptance are
+  never conflated (see `docs/AUTOGEN_DESIGN.md` Section 11).
+
+## `analyze_results.py` — Path 2 additions
+
+- `summarize(rows, methods=(...))` now takes an explicit `methods`
+  sequence (defaulting to the original three, for backward
+  compatibility) instead of a hard-coded tuple, and additionally reports
+  `workflow_accepted`, `workflow_false_accept_count`, and
+  `workflow_false_accept_pct_of_workflow_accepted` per mode, using
+  `.get(..., internal_pass)` / `.get(..., false_accept)` fallbacks so
+  older three-method result files (which predate the `workflow_accept`
+  field) are still summarized correctly.
+- `main()` reads `config.get('methods', ['baseline', 'testing',
+  'reflexion'])` to build the expected `(task_id, mode)` validation set,
+  so it transparently supports both pre-Path-2 and Path-2 result
+  directories.
+- An additional AutoGen-vs-Reflexion paired comparison is printed only
+  when `'autogen'` is present in `methods`.
 
 ---
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from statistics import mean
 
 
-def summarize(rows):
+def summarize(rows, methods=('baseline', 'testing', 'reflexion')):
     """Compute summary statistics per experimental mode.
 
     Token totals/means are computed only over rows where token usage was
@@ -17,14 +17,36 @@ def summarize(rows):
     than being silently treated as zero-cost. If every row in a mode is
     missing usage, 'mean_total_tokens' is reported as None (unavailable),
     not 0.0, to avoid presenting an incomplete total as a measured zero.
+
+    Two acceptance measures are reported for every non-baseline mode
+    (Testing, Reflexion, and -- when present -- AutoGen):
+      - 'false_accept_pct_of_accepted': the existing "test false
+        acceptance" rate -- of candidates whose INTERNAL tests passed,
+        the percentage that still failed official held-out evaluation.
+        For Testing/Reflexion this is also their only acceptance
+        concept. For AutoGen, internal-test pass is a necessary but not
+        sufficient condition for workflow acceptance, so this number by
+        itself is NOT AutoGen's full acceptance decision.
+      - 'workflow_false_accept_pct_of_workflow_accepted': of candidates
+        the EXPERIMENTAL WORKFLOW actually accepted (for AutoGen: both
+        internal tests passed AND the reviewer validly approved; for
+        Testing/Reflexion: identical to internal-test pass), the
+        percentage that still failed official held-out evaluation. A
+        candidate returned only because the attempt budget was
+        exhausted is not counted as workflow-accepted.
+    Both use an unavailable (None) value rather than 0 for a zero
+    denominator, and baseline rows (which have no accept/reject concept)
+    are excluded from both measures, consistent with prior behavior.
     """
     summary = []
-    for mode in ('baseline', 'testing', 'reflexion'):
+    for mode in methods:
         r = [x for x in rows if x['mode'] == mode]
         if not r:
             continue
         accepted = [x for x in r if x['internal_pass'] is True]
         false = sum(x['false_accept'] is True for x in accepted)
+        workflow_accepted = [x for x in r if x.get('workflow_accept', x['internal_pass']) is True]
+        workflow_false = sum(x.get('workflow_false_accept', x['false_accept']) is True for x in workflow_accepted)
         token_rows = [x for x in r if x.get('tokens_available', True) and
                       x.get('input_tokens') is not None and x.get('output_tokens') is not None]
         missing_token_rows = len(r) - len(token_rows)
@@ -32,6 +54,10 @@ def summarize(rows):
                         'accuracy_pct': round(100*mean(x['heldout_pass'] for x in r), 2),
                         'internal_accepted': len(accepted), 'false_accept_count': false,
                         'false_accept_pct_of_accepted': round(100*false/len(accepted), 2) if accepted else None,
+                        'workflow_accepted': len(workflow_accepted),
+                        'workflow_false_accept_count': workflow_false,
+                        'workflow_false_accept_pct_of_workflow_accepted': (
+                            round(100*workflow_false/len(workflow_accepted), 2) if workflow_accepted else None),
                         'mean_attempts': round(mean(x['attempts'] for x in r), 2),
                         'mean_calls': round(mean(x['calls'] for x in r), 2),
                         'mean_total_tokens': (round(mean(x['input_tokens']+x['output_tokens'] for x in token_rows), 2)
@@ -50,11 +76,12 @@ def main():
     args = p.parse_args()
     rows = [json.loads(x) for x in (args.directory/'results.jsonl').read_text().splitlines() if x.strip()]
     config = json.loads((args.directory/'config.json').read_text())
-    expected = {(task, mode) for task in config['tasks'] for mode in ('baseline','testing','reflexion')}
+    methods = config.get('methods', ['baseline', 'testing', 'reflexion'])
+    expected = {(task, mode) for task in config['tasks'] for mode in methods}
     pairs = [(r['task_id'], r['mode']) for r in rows]
     if set(pairs) != expected or len(pairs) != len(expected):
         raise ValueError('Incomplete or duplicate results: do not present as a complete experiment.')
-    summary = summarize(rows)
+    summary = summarize(rows, methods)
     print(json.dumps(summary, indent=2))
     with (args.directory/'summary.csv').open('w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=list(summary[0])); writer.writeheader(); writer.writerows(summary)
@@ -77,6 +104,10 @@ def main():
     fig.tight_layout(); fig.savefig(args.directory/'tokens.png',dpi=180); plt.close(fig)
     by_task = {t:{r['mode']:r for r in rows if r['task_id']==t} for t in config['tasks']}
     print('Paired comparison (Reflexion vs testing):', { 'reflexion_only_pass':sum(v['reflexion']['heldout_pass'] and not v['testing']['heldout_pass'] for v in by_task.values()), 'testing_only_pass':sum(v['testing']['heldout_pass'] and not v['reflexion']['heldout_pass'] for v in by_task.values())})
+    if 'autogen' in methods:
+        print('Paired comparison (AutoGen vs Reflexion):', {
+            'autogen_only_pass': sum(v['autogen']['heldout_pass'] and not v['reflexion']['heldout_pass'] for v in by_task.values()),
+            'reflexion_only_pass': sum(v['reflexion']['heldout_pass'] and not v['autogen']['heldout_pass'] for v in by_task.values())})
 
 if __name__ == '__main__':
     main()

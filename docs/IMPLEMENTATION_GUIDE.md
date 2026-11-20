@@ -121,7 +121,7 @@ most directly tied to the research question.
 
 ### `iterate(llm, evaluator, problem, initial, tests, use_reflection, max_attempts=3) -> dict`
 This is the single most important function in the repository. See the
-main README's [Section 10](../README.md#10-main-algorithm-and-stopping-conditions)
+main README's [Section 10](README_full.md#10-main-algorithm-and-stopping-conditions)
 for the full pseudocode and stop-reason table. Implementation notes not
 covered there:
 - Raises `ValueError` immediately if `max_attempts < 1`, before any LLM
@@ -191,7 +191,7 @@ expression is still caught.
   `PATH` (`shutil.which`), then runs `docker image inspect` to fail fast
   if the image is not pulled. Raises `RuntimeError` otherwise.
 - `_run(self, payload) -> Evaluation`: builds the full `docker run`
-  command (see the main README's [Docker section](../README.md#15-docker-setup-and-security)
+  command (see the main README's [Docker section](README_full.md#15-docker-setup-and-security)
   for the exact flags), pipes `json.dumps(payload)` to the container's
   stdin, and interprets the result:
   - `subprocess.TimeoutExpired` → best-effort `docker rm -f` cleanup,
@@ -301,7 +301,7 @@ scored result rows, with correct shared-event attribution.
 
 ### `main()`
 - Parses CLI flags (see the main README's
-  [full flag reference](../README.md#17-running-the-experiment)).
+  [full flag reference](README_full.md#17-running-the-experiment)).
 - Constructs `DockerEvaluator()` **before** constructing `LLM(...)`, so a
   missing/misconfigured Docker setup is caught before any API call is
   made (and therefore before any API cost is incurred).
